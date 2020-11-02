@@ -209,7 +209,7 @@ def run():
     # mesh = trimesh.Trimesh(vertices=[[0, 0, 0], [0, 0, 1], [0, 1, 0]],
     #                        faces=[[0, 1, 2]])
     # with open("/Users/shimonheimowitz/PycharmProjects/DeepSIM/datasets/simple.obj", 'rb') as f:
-    filename = "/Users/shimonheimowitz/PycharmProjects/DeepSIM/datasets/man_highres.stl"
+    filename = "/Users/shimonheimowitz/PycharmProjects/3d_tps/demo/data/mushroom_fixed_light.stl"
     mesh = pyvista.read(filename)
 
     # class m:
@@ -222,7 +222,7 @@ def run():
 
     v = mesh.points
     v -= np.min(v, axis=0)
-    v /= 0.1
+    # v /= 0.1
     mesh.points = v
 
     (res, corners), src, dst = tps_warp_mesh_rand(v, points_per_dim=2, scale=0.5)
@@ -269,7 +269,8 @@ def run():
 
     new_mesh = mesh.copy()
     new_mesh.points = new_vert
-    pyvista.save_meshio("../datasets/man_warped.obj", mesh)
+
+    pyvista.save_meshio("/Users/shimonheimowitz/PycharmProjects/3d_tps/demo/results/mushroom.obj", new_mesh)
 
     s = np.linalg.norm(v - new_vert, axis=1)
     plotter = pyvista.Plotter()  # instantiate the plotter
