@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
-import os
+import os, sys
 from warp_3d import warp_images
 
 import pyvista
@@ -268,14 +268,14 @@ def display(corners, verts, src, dst, mesh, new_mesh):
 def hash_deform(src, dst):
     return str(abs(hash(tuple(s for s in src.flatten()) + tuple(d for d in dst.flatten()))))
 
-def run(display=display, save=save):
+def run(dataset_path='dataset', display=display, save=save):
 
 
     # mesh objects can be created from existing faces and vertex data
     # mesh = trimesh.Trimesh(vertices=[[0, 0, 0], [0, 0, 1], [0, 1, 0]],
     #                        faces=[[0, 1, 2]])
     # with open("/Users/shimonheimowitz/PycharmProjects/DeepSIM/datasets/simple.obj", 'rb') as f:
-    filename = "/Users/shimonheimowitz/PycharmProjects/3d_tps/demo/data/mushroom_fixed_light.stl"
+    filename = "demo/data/mushroom_fixed_light.stl"
     mesh = load_mesh(filename, resolution=100)
 
     v = mesh.points
@@ -301,17 +301,16 @@ def run(display=display, save=save):
     new_mesh.points = new_vert
 
     if save:
-        save_mesh(os.path.join("dataset", hash_deform(src, dst) + ".stl"), new_mesh)
+        save_mesh(os.path.join(dataset_path, hash_deform(src, dst) + ".stl"), new_mesh)
 
     if display:
         display(corners, new_vert, src, dst, mesh, new_mesh)
 
 
 
-def loop(iters=1000, display=False, save=True):
+def loop(dataset_path="dataset", iters=10000, display=False, save=True):
     for _ in range(iters):
-        run(display=display, save=save)
-
+        run(dataset_path, display=display, save=save)
 
 
 
@@ -324,4 +323,6 @@ def test():
     pass
 
 if __name__ == '__main__':
-    loop()
+
+    path = sys.argv[1] if len(sys.argv) > 1 else "dataset"
+    loop(path)
