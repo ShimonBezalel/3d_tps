@@ -268,7 +268,7 @@ def display(corners, verts, src, dst, mesh, new_mesh):
 def hash_deform(src, dst):
     return str(abs(hash(tuple(s for s in src.flatten()) + tuple(d for d in dst.flatten()))))
 
-def run():
+def run(display=display, save=save):
 
 
     # mesh objects can be created from existing faces and vertex data
@@ -301,16 +301,16 @@ def run():
     new_mesh.points = new_vert
 
     if save:
-        save_mesh(os.path.join("/Users/shimonheimowitz/PycharmProjects/3d_tps/dataset", hash_deform(src, dst) + ".stl"), new_mesh)
+        save_mesh(os.path.join("dataset", hash_deform(src, dst) + ".stl"), new_mesh)
 
     if display:
         display(corners, new_vert, src, dst, mesh, new_mesh)
 
 
 
-
-
-
+def loop(iters=1000, display=False, save=True):
+    for _ in range(iters):
+        run(display=display, save=save)
 
 
 
@@ -324,4 +324,4 @@ def test():
     pass
 
 if __name__ == '__main__':
-    run()
+    loop()
