@@ -1,0 +1,4 @@
+pyvista
+numpy
+matplotlib
+scipy
