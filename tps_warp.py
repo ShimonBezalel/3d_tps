@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
-
+import os
 from warp_3d import warp_images
 
 import pyvista
@@ -11,6 +11,9 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d import proj3d
+
+
+save, displau = True, True
 
 class Arrow3D(FancyArrowPatch):
     def __init__(self, xs, ys, zs, *args, **kwargs):
@@ -180,27 +183,90 @@ def tps_warp_2(image, dst, src):
     return out
 
 
-def _get_random_source(vertices, length, scale=0.5, inside_only=True):
-    # m = np.min(vertices, axis=0)
-    # M = np.max(vertices, axis=0)
+def _get_random_source(vertices, length, scale=3, inside_only=True):
+    m = np.min(vertices, axis=0)
+    M = np.max(vertices, axis=0)
 
-    M = scale * np.max(np.abs(vertices))
+    centroid = (m + M) / 2
 
-    return np.random.uniform(-1 * M, M, (length, 3))
+    M = np.max(np.abs(vertices), axis=0)
+    # sources = np.random.uniform(m,  scale * M, (length, 3))
+    sources = np.random.uniform(-M,  M, (length, 3))
+    return sources + centroid
 
 
-
-def tps_warp_mesh_rand(vertices, points_per_dim=5, scale:float=1, grid=False):
+def tps_warp_mesh_rand(vertices, points_per_dim=5, overall_points=2, scale:float=1, grid=False):
     if grid:
         src = _get_regular_grid_mesh(vertices, points_per_dim=points_per_dim)
     else:
-        src = _get_random_source(vertices, length=points_per_dim ** 3)
+        src = _get_random_source(vertices, length=overall_points)
     dst = _generate_random_vectors(src, scale=scale*np.ptp(vertices, axis=0))
     return tps_warp_mesh(vertices, src, dst), src, dst
 
 def tps_warp_mesh(vertices, dst, src):
     out = _thin_plate_spline_warp_mesh(vertices, src, dst)
     return out
+
+
+def load_mesh(path, align=True, resolution=100):
+    mesh = pyvista.read(path)
+
+    v = mesh.points
+
+    if align:
+        v -= np.min(v, axis=0)
+
+    v *= resolution / np.max(v)
+
+    mesh.points = v
+
+    return mesh
+
+def save_mesh(path, mesh):
+    pyvista.save_meshio(path, mesh, binary=True)
+
+
+
+def display(corners, verts, src, dst, mesh, new_mesh):
+    v = mesh.points
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    m, M = np.min(corners[0]), np.max(corners[-1])
+    ax.set_xlim3d(m-10, M+10)
+    ax.set_ylim3d(m-10, M+10)
+    ax.set_zlim3d(m-10, M+10)
+
+    ax.scatter(v[..., 0], v[..., 1], v[..., 2], marker='.', color=(0.12156863, 0.34901961, 0.22352941, 0.6))
+    ax.scatter(verts[..., 0], verts[..., 1], verts[..., 2], marker = '.', color=(0.3, 0.3, 1, 0.8))
+
+    for s, d in zip(src, dst):
+        # ax.plot([mean_x,v[0]], [mean_y,v[1]], [mean_z,v[2]], color='red', alpha=0.8, lw=3)
+        # I will replace this line with:
+        a = Arrow3D([s[0], d[0]], [s[1], d[1]],
+                    [s[2], d[2]], mutation_scale=15,
+                    lw=3, arrowstyle="-|>", color="r")
+        ax.add_artist(a)
+
+    ax.scatter(corners[..., 0], corners[..., 1], corners[..., 2], marker='x', color="black")
+    # ax.scatter(dst[..., 0], dst[..., 1], dst[..., 2], marker = '^')
+
+    plt.show()
+
+    s = np.linalg.norm(v - verts, axis=1)
+    plotter = pyvista.Plotter()  # instantiate the plotter
+    plotter.add_mesh(mesh, style='wireframe', color=(0.8, 0.8, 0.8))  # add a mesh to the scene
+    plotter.add_mesh(new_mesh, style='wireframe', scalars=s)
+    for s, d in zip(src, dst):
+        dir = d - s
+        n = np.linalg.norm(dir)
+        dir /= n
+        plotter.add_arrows(s, dir, n )#, color='red')
+    plotter.add_bounding_box()
+    cpos = plotter.show()
+
+def hash_deform(src, dst):
+    return str(abs(hash(tuple(s for s in src.flatten()) + tuple(d for d in dst.flatten()))))
 
 def run():
 
@@ -210,20 +276,9 @@ def run():
     #                        faces=[[0, 1, 2]])
     # with open("/Users/shimonheimowitz/PycharmProjects/DeepSIM/datasets/simple.obj", 'rb') as f:
     filename = "/Users/shimonheimowitz/PycharmProjects/3d_tps/demo/data/mushroom_fixed_light.stl"
-    mesh = pyvista.read(filename)
-
-    # class m:
-    #     vertices = None
-    #     def export(self, fname):
-    #         np.savetxt(fname, self.vertices, delimiter=",")
-    #
-    # mesh = m()
-    # mesh.vertices = np.loadtxt("/Users/shimonheimowitz/PycharmProjects/DeepSIM/datasets/man_highres_l.txt", delimiter=",")
+    mesh = load_mesh(filename, resolution=100)
 
     v = mesh.points
-    v -= np.min(v, axis=0)
-    # v /= 0.1
-    mesh.points = v
 
     (res, corners), src, dst = tps_warp_mesh_rand(v, points_per_dim=2, scale=0.5)
 
@@ -242,47 +297,22 @@ def run():
         res[2][index_left] * w_left + res[2][index_right] * w_right,
         ]).transpose()
 
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    m, M = np.min(corners[0]), np.max(corners[-1])
-    ax.set_xlim3d(m-10, M+10)
-    ax.set_ylim3d(m-10, M+10)
-    ax.set_zlim3d(m-10, M+10)
-
-    ax.scatter(v[..., 0], v[..., 1], v[..., 2], marker='.', color=(0.12156863, 0.34901961, 0.22352941, 0.6))
-    ax.scatter(new_vert[..., 0], new_vert[..., 1], new_vert[..., 2], marker = '.', color=(0.3, 0.3, 1, 0.8))
-
-    for s, d in zip(src, dst):
-        # ax.plot([mean_x,v[0]], [mean_y,v[1]], [mean_z,v[2]], color='red', alpha=0.8, lw=3)
-        # I will replace this line with:
-        a = Arrow3D([s[0], d[0]], [s[1], d[1]],
-                    [s[2], d[2]], mutation_scale=15,
-                    lw=3, arrowstyle="-|>", color="r")
-        ax.add_artist(a)
-
-    ax.scatter(corners[..., 0], corners[..., 1], corners[..., 2], marker='x', color="black")
-    # ax.scatter(dst[..., 0], dst[..., 1], dst[..., 2], marker = '^')
-
-    plt.show()
-
     new_mesh = mesh.copy()
     new_mesh.points = new_vert
 
-    pyvista.save_meshio("/Users/shimonheimowitz/PycharmProjects/3d_tps/demo/results/mushroom.obj", new_mesh)
+    if save:
+        save_mesh(os.path.join("/Users/shimonheimowitz/PycharmProjects/3d_tps/dataset", hash_deform(src, dst) + ".stl"), new_mesh)
 
-    s = np.linalg.norm(v - new_vert, axis=1)
-    plotter = pyvista.Plotter()  # instantiate the plotter
-    plotter.add_mesh(mesh, style='wireframe', color=(0.8, 0.8, 0.8))  # add a mesh to the scene
-    plotter.add_mesh(new_mesh, style='wireframe', scalars=s)
-    for s, d in zip(src, dst):
-        dir = d - s
-        n = np.linalg.norm(dir)
-        dir /= n
-        plotter.add_arrows(s, dir, n )#, color='red')
-    plotter.add_bounding_box()
-    cpos = plotter.show()
+    if display:
+        display(corners, new_vert, src, dst, mesh, new_mesh)
+
+
+
+
+
+
+
+
 
 
 def test():
