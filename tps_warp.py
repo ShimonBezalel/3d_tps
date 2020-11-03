@@ -183,7 +183,7 @@ def tps_warp_2(image, dst, src):
     return out
 
 
-def _get_random_source(vertices, length, scale=3, inside_only=True):
+def _get_random_source(vertices, length, scale=1.5, inside_only=True):
     m = np.min(vertices, axis=0)
     M = np.max(vertices, axis=0)
 
@@ -191,17 +191,21 @@ def _get_random_source(vertices, length, scale=3, inside_only=True):
 
     M = np.max(np.abs(vertices), axis=0)
     # sources = np.random.uniform(m,  scale * M, (length, 3))
-    sources = np.random.uniform(-M,  M, (length, 3))
+    sources = np.random.uniform(-M * scale,  M * scale, (length, 3))
     return sources + centroid
 
-
-def tps_warp_mesh_rand(vertices, points_per_dim=5, overall_points=2, scale:float=1, grid=False):
+def gen_rand_vectors(vertices, points_per_dim=5, overall_points=2, scale:float=1, grid=False):
     if grid:
         src = _get_regular_grid_mesh(vertices, points_per_dim=points_per_dim)
     else:
         src = _get_random_source(vertices, length=overall_points)
     dst = _generate_random_vectors(src, scale=scale*np.ptp(vertices, axis=0))
-    return tps_warp_mesh(vertices, src, dst), src, dst
+    return src, dst
+
+def tps_warp_mesh_rand(vertices, src=None, dst=None):
+    if src is None or dst is None:
+        src, dst = gen_rand_vectors(vertices)
+    return tps_warp_mesh(vertices, src, dst)
 
 def tps_warp_mesh(vertices, dst, src):
     out = _thin_plate_spline_warp_mesh(vertices, src, dst)
@@ -270,41 +274,43 @@ def hash_deform(src, dst):
 
 def run(dataset_path='dataset', display=display, save=save):
 
+    filename = "mushroom_fixed_light"
+    root = "demo/data"
+    ext = "stl"
+    original_complex = os.path.join(root, "{}.{}".format(filename, ext))
+    original_primitive = os.path.join(root, "{}_{}.{}".format(filename, "p", ext))
+    complex_mesh = load_mesh(original_complex, resolution=100)
+    primitive_mesh = load_mesh(original_primitive, resolution=100)
 
-    # mesh objects can be created from existing faces and vertex data
-    # mesh = trimesh.Trimesh(vertices=[[0, 0, 0], [0, 0, 1], [0, 1, 0]],
-    #                        faces=[[0, 1, 2]])
-    # with open("/Users/shimonheimowitz/PycharmProjects/DeepSIM/datasets/simple.obj", 'rb') as f:
-    filename = "demo/data/mushroom_fixed_light.stl"
-    mesh = load_mesh(filename, resolution=100)
+    src, dst = gen_rand_vectors(complex_mesh.points, points_per_dim=2, scale=0.5)
+    vector_hash = hash_deform(src, dst)
+    for mesh, suffix in (complex_mesh, "o"), (primitive_mesh, "p"):
+        v = mesh.points
+        res, corners = tps_warp_mesh_rand(v, src, dst)
 
-    v = mesh.points
+        vt = v.transpose()
 
-    (res, corners), src, dst = tps_warp_mesh_rand(v, points_per_dim=2, scale=0.5)
-
-    vt = v.transpose()
-
-    w_right, index_left = np.modf(vt)
-    w_right = np.mean(w_right, axis=0)
-    w_left = 1 - w_right
-    index_right = tuple((index_left + 1).astype(np.int))
-    index_left = tuple(index_left.astype(np.int))
+        w_right, index_left = np.modf(vt)
+        w_right = np.mean(w_right, axis=0)
+        w_left = 1 - w_right
+        index_right = tuple((index_left + 1).astype(np.int))
+        index_left = tuple(index_left.astype(np.int))
 
 
-    new_vert = np.array([
-        res[0][index_left] * w_left + res[0][index_right] * w_right,
-        res[1][index_left] * w_left + res[1][index_right] * w_right,
-        res[2][index_left] * w_left + res[2][index_right] * w_right,
-        ]).transpose()
+        new_vert = np.array([
+            res[0][index_left] * w_left + res[0][index_right] * w_right,
+            res[1][index_left] * w_left + res[1][index_right] * w_right,
+            res[2][index_left] * w_left + res[2][index_right] * w_right,
+            ]).transpose()
 
-    new_mesh = mesh.copy()
-    new_mesh.points = new_vert
+        new_mesh = mesh.copy()
+        new_mesh.points = new_vert
 
-    if save:
-        save_mesh(os.path.join(dataset_path, hash_deform(src, dst) + ".stl"), new_mesh)
+        if save:
+            save_mesh(os.path.join(dataset_path, "{}_{}.{}".format(vector_hash, suffix, ext)), new_mesh)
 
-    if display:
-        display(corners, new_vert, src, dst, mesh, new_mesh)
+        if display:
+            display(corners, new_vert, src, dst, mesh, new_mesh)
 
 
 
